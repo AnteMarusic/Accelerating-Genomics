@@ -54,7 +54,11 @@ dkms.conf
 #.idea
 .idea
 cmake-build-debug
-CMakeLists.txt
+PairHMM/CMakeLists.txt
 
 #test
 test.txt
+git.txt
+
+#apple
+.DS_Store
