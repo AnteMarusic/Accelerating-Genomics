@@ -68,7 +68,7 @@ Conversely, global alignment considers the entire length of both sequences. Both
 # Smith Waterman Gotoh
 
 The original Smith Waterman algorithm seeks the local alignment that yields the highest score based on a predefined scoring scheme. This scoring scheme typically assigns positive values for matches between corresponding nucleotides (e.g., A aligning with A), negative values for mismatches (e.g., A aligning with G), and penalties for introducing gaps (insertions or deletions) in one sequence to better align with the other.
-Gotoh extended in the 1980s the functionalities of the original algorithm by introducing the idea of affine gap penalty. While the original algorithm assigns always the same penalty to gaps, the modified one 
+Gotoh extended in the 1980s the functionalities of the original algorithm by introducing the idea of affine gap penalty. While the original algorithm assigns always the same penalty to gaps, the modified one
 penalises differently the initiation of a gap and the extension of an exsisting gap; in particular, extending a gap isn't as penalised as beginning one.
 This approach better models the way mutations in biology happens, in fact it is more probable that a single longer gap is inserted in a sequence, rather than multiple smaller gaps. Moreover, it has been proven that the first amino acid or nucleotide inserted or deleted is more significant, from a biological point of view, than the subsequent ones. Since the extension of gaps is less penalised the algorithm discourages the introduction of unnecessary gaps in the alignment.
 
@@ -77,7 +77,7 @@ To further extend the algorithm in case of protein alignment, one could use vari
 
 # Inner working
 
-The algorithm employs dynamic programming, a powerful technique for efficiently solving problems by breaking them down into smaller, overlapping subproblems. 
+The algorithm employs dynamic programming, a powerful technique for efficiently solving problems by breaking them down into smaller, overlapping subproblems.
 It takes in input the two strings to align and the scoring weights.
 
 * string s1
@@ -107,21 +107,21 @@ Premise: the gap penalty is computed with the following formula, where k is the 
 $$ g(k) = \alpha + \beta k$$
 
 Matrixes:
-$$ 
-    p_{i,j} = \max(d_{i-1,j} + g(1), \quad p_{i-1,j} + \beta) 
-$$
-$$ 
-    q_{i,j} = \max(d_{i,j-1} + g(1), \quad q_{i,j-1} + \beta) 
-$$
+$
+    p_{i,j} = \max(d_{i-1,j} + g(1), \quad p_{i-1,j} + \beta)
+$
+$
+    q_{i,j} = \max(d_{i,j-1} + g(1), \quad q_{i,j-1} + \beta)
+$
 In case of matching nucleotides
-$$ 
+$
     d_{i,j} = \max(d_{i-1,j-1} + \text{match score}, \quad p_{i,j},\quad q_{i,j})
-$$
+$
 In case of mismatching nucleotides
-$$ 
-    d_{i,j} = \max(d_{i-1,j-1} + \text{mismatch score}, \quad p_{i,j},\quad q_{i,j}) 
-$$
- 
+$
+    d_{i,j} = \max(d_{i-1,j-1} + \text{mismatch score}, \quad p_{i,j},\quad q_{i,j})
+$
+
 
 ### References Smith waterman part
 Gotoh
