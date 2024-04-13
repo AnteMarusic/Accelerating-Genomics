@@ -7,8 +7,8 @@
 #define MAX_SIZE 10000
 #define SCORE_MATCH 1
 #define SCORE_MISMATCH (-1)
-#define SCORE_OPEN_GAP (-2)
-#define SCORE_EXTEND_GAP (-2)
+#define SCORE_OPEN_GAP (-3)
+#define SCORE_EXTEND_GAP (-1)
 
 //todo maybe are necessary controls on the length of the input
 //todo what happens if _ are present in the input string?

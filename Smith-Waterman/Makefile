@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -g
-OUTPUT = Smith-Waterman
+OUTPUT = program
 
 all: $(OUTPUT)
 
