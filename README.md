@@ -121,6 +121,36 @@ In case of mismatching nucleotides
 $d_{i,j} = \max(d_{i-1,j-1} + \text{mismatch score}, \quad p_{i,j},\quad q_{i,j})$
 
 
+# PairHMM
+This algorithm performs the local alignment between sequences like in the Smith Waterman, however uses statistics coming from the sequencing machines to compute the most probable alignment.
+
+## Algorithm
+
+$$M(i, j) = p_{i,j}* (mm_j * M(i - 1, j - 1) + gm_j * [X(i - 1, j − 1) + Y(i – 1, j − 1)])$$
+
+$$X(i, j) = xx_j * X(i, j - 1) + mx_j * M(i, j – 1)$$
+
+$$Y(i, j) = yy_j * Y(i - 1, j) + mx_j * M(i - 1, j)$$
+
+#### Parameters
+
+$$
+p_{i,j} = \left\{
+\begin{array}{cl}
+\frac{\epsilon(Qb)}{3}, & \text{if read[i], hapl[j] mismatching bases} \\
+1 - \epsilon(Qb), & \text{if read[i], hapl[j] matching bases}
+\end{array}
+\right.
+$$
+
+
+$\epsilon = 10^{\frac{-Qread[i]}{10}}$
+$xx = yy = 0.1$
+$gm = 0.9$
+$mx_i = 10^{\frac{-Qinsert[i]}{10}}$
+$my_i = 10^{\frac{-Qdelete[i]}{10}}$
+$mm = 1 - (mx + my)$
+
 ### References Smith waterman part
 Gotoh
 http://rna.informatik.uni-freiburg.de/Teaching/index.jsp?toolName=Gotoh
