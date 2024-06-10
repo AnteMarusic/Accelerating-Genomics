@@ -2,9 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <cuda_runtime.h>
-#include <string.h> // Include the string.h header for strcspn function
+#include <string.h>
 #include <limits.h>
 
+//DEBUGGING MACROS______________________________________________________________
+// Comment out the following line to disable the DEBUG macro
 #undef DEBUG
 //#define DEBUG
 
@@ -26,15 +28,15 @@
     }                                                                          \
 }
 
-inline double seconds()
-{
+//used to find the execution time of the program
+inline double seconds(){
     struct timeval tp;
     struct timezone tzp;
     int i = gettimeofday(&tp, &tzp);
     return ((double)tp.tv_sec + (double)tp.tv_usec * 1.e-6);
 }
 
-#define NEGATIVE_INFINITY INT_MIN  // Minimum value for an int
+//CONSTANTS_____________________________________________________________________
 #define MAX_LINE_LENGTH 10000
 #define SCORE_MATCH 1
 #define SCORE_MISMATCH (-1)
@@ -46,23 +48,36 @@ inline double seconds()
 
 
 /*
-Example of how the strings are in the matrixes
+The convention used in the matrixes is the following:
+the X is the horizontal axis and the Y is the vertical axis,
+the origin is in the top left corner of the matrix.
+so the indexes are ix for the columns and iy for the rows.
+Example of how the sequences are in the matrixes
+the number of columns is always less than the number of rows
 s1 = CG
 s2 = CCGA
-nx is the size s2 + 1
-    _CCGA nx
-_   
-C    0000
-G    0000
-ny
+this two sequences are in the matrixes in this way
+    _CG
+_
+C   000
+C   000
+G   000
+A   000
+
+ny is the number of rows and nx is the number of columns
+int this example
+nx is the size of s1 + 1
+ny is the size of s2 + 1
 */
 
+//FUNCTIONS_____________________________________________________________________
+//used to print the three antidiagonals. Used for debugging
 __device__ void a_print(int *a, int len, int nx) {
     int k = 1;
     int q = 1;
     PRINT("\n____________________________\n");
     for(int i = 0; i < len; i ++) {
-        a[i] == NEGATIVE_INFINITY ? printf("-∞,") : printf("%d,", a[i]);
+        a[i] == INT_MIN ? printf("-∞,") : printf("%d,", a[i]);
         if (i + 1 == (nx) * k) {
             if (i + 1 == (nx * 3) * q) {
                 PRINT("\n");
@@ -76,6 +91,7 @@ __device__ void a_print(int *a, int len, int nx) {
     return;
 }
 
+//used to print the array. Used for debugging
 __device__ void array_print(int *a, int len) {
     PRINT("\n____________________________\n");
     for(int i = 0; i<len; i++) {
@@ -84,6 +100,7 @@ __device__ void array_print(int *a, int len) {
     PRINT("\n____________________________\n");
 }
 
+//used to find the length of a string in the device (cannot use strlen)
 __device__ size_t device_strlen(const char* str) {
     size_t len = 0;
     while (str[len] != '\0') {
@@ -92,19 +109,20 @@ __device__ size_t device_strlen(const char* str) {
     return len;
 }
 
-
+//functions to sum and find the max of two integers handling correctly the case of negative infinity (INT_MIN)
 __device__ int max_of_two_integers(int a, int b) {
     return (a > b) ? a : b;
 }
 
 __device__ int sum_with_infinity (int a, int b) {
-    return (a == NEGATIVE_INFINITY || b == NEGATIVE_INFINITY) ? NEGATIVE_INFINITY : a + b;
+    return (a == INT_MIN || b == INT_MIN) ? INT_MIN : a + b;
 }
 
 __device__ int max_of_four_integers (int a, int b, int c, int d) {
     return max_of_two_integers (max_of_two_integers (a, b), max_of_two_integers(c, d));
 }
 
+//used to reverse a sequence
 void reverse_array(char arr[], int size) {
   // Loop through half the array
   for (int i = 0; i < size / 2; i++) {
@@ -117,22 +135,20 @@ void reverse_array(char arr[], int size) {
 
 //returns positive values in case of success and the value is in val
 //returns negative number in case of failure
-__device__ int m_get(int *val, int iy, int ix, int mat, int *antidiags, int nx, int ny) {
+//Only three antidiagonals at a time are saved. 
+//This function is used to get the value of a coordinate that is currently saved.
+__device__ int m_get(int *val, int iy, int ix, int mat, int *three_antidiagonals, int nx, int ny) {
     int antid_dim = nx;
-    int offset_antid = 0;
     int offset_mat = 0;
     int index = 0;
+    int cur_antid_num = ix + iy;
+    int offset_antid = cur_antid_num % 3;  //three is the num of antid saved at the same time
+    //check the input
     if (ix >= nx || iy >= ny|| ix < 0 || iy < 0) {
         printf("[m_get thread %d] out of bounds set iy: %d, ix: %d\n",threadIdx.x, iy, ix);
         return -1;
     }
-    /*
-    if (ix + iy != cur_antid_num) {
-        printf("[m_get] iy: %d, ix: %d not in mem\n", iy, ix);
-        return -1;
-    }
-    */
-    
+    //compute the index of the required value
     switch (mat) {
         case P :
             offset_mat = 0;
@@ -146,8 +162,6 @@ __device__ int m_get(int *val, int iy, int ix, int mat, int *antidiags, int nx, 
         default :
             printf("[m_get thread %d] mat doesn't exist\n", threadIdx.x);
     }
-    int cur_antid_num = ix + iy;
-    offset_antid = cur_antid_num % 3;//three is the num of antid saved at the same time
     
     if(cur_antid_num > ny-1){
         index = ny - 1 - iy + offset_antid*antid_dim + offset_mat;
@@ -155,30 +169,29 @@ __device__ int m_get(int *val, int iy, int ix, int mat, int *antidiags, int nx, 
     else {
         index = ix + offset_antid*antid_dim + offset_mat;
     }
-    *val = antidiags[index];
+    //get the value
+    *val = three_antidiagonals[index];
     PRINT("[m_get thread %d] getting val: %d, at iy:%d, ix:%d, on matrix: %d, at index: %d\n", threadIdx.x, *val, iy, ix, mat, index);
     return 1;
 }
 
 //returns positive values in case of success and the value is in val
 //returns negative number in case of failure
-__device__ int m_set(int *val, int iy, int ix, int mat, int *antidiags, int nx, int ny) {
+//Only three antidiagonals at a time are saved. 
+//This function is used to set the value of a coordinate that is currently saved.
+__device__ int m_set(int *val, int iy, int ix, int mat, int *three_antidiagonals, int nx, int ny) {
     int antid_dim = nx;
-    int offset_antid = 0;
     int offset_mat = 0;
     int index = 0;
+    int cur_antid_num = ix + iy;
+    int offset_antid = cur_antid_num % 3;  //three is the num of antid saved at the same time
 
     //check the input
     if (ix >= nx || iy >= ny|| ix < 0 || iy < 0) {
         printf("[m_set thread %d] out of bounds set iy: %d, ix: %d\n", threadIdx.x, iy, ix);
         return -1;
     }
-    /*if (ix + iy != cur_antid_num) {
-        printf("[m_set] iy:%d, ix:%d not in mem\n", iy, ix);
-        return -1;
-    }*/
-    
-    //compute the offset_mat
+    //compute the index of the required value
     switch (mat) {
         case P :
             offset_mat = 0;
@@ -192,9 +205,7 @@ __device__ int m_set(int *val, int iy, int ix, int mat, int *antidiags, int nx, 
         default :
             printf("[m_set thread %d] mat doesn't exist\n", threadIdx.x);
     }
-    int cur_antid_num = ix + iy;
-    //three is the num of antid saved at the same time
-    offset_antid = cur_antid_num % 3;
+    
     if(cur_antid_num > ny-1){
         index = ny - 1 - iy + offset_antid*antid_dim + offset_mat;
     }
@@ -203,65 +214,68 @@ __device__ int m_set(int *val, int iy, int ix, int mat, int *antidiags, int nx, 
     }
 
     PRINT("[m_set thread %d] setting val: %d, iy:%d, ix:%d, at index: %d on matrix %d\n", threadIdx.x, *val, iy, ix, index, mat);
-    antidiags[index] = *val;
+    //set the value
+    three_antidiagonals[index] = *val;
     return 1;
 }
 
-
-__global__ void alignGPU(char **sequences, int sequences_num, int *d_result, int *d_error, int antidiags_size, int match_score, int mismatch_score, int gap_open_score, int gap_extend_score) {
-    int bid = blockIdx.x + blockIdx.y + blockIdx.z;
-    int tid = threadIdx.x + threadIdx.y + threadIdx.z;
-    int grid_size = gridDim.x+gridDim.y+gridDim.z;
-    if(bid == 0 && tid == 0) {
-        PRINT("bid: %d, tid: %d\n", bid, tid);
-        array_print(d_result, grid_size);
-    }
-    //safety check to avoid accessing unwanted memory areas if the gridsize has not been correctly set.
-    if (bid >= sequences_num) {*d_error = -1; return;} 
+//KERNEL_______________________________________________________________________
+__global__ void alignGPU(char **sequences, int sequences_num, int *d_result, int *d_error, int three_antidiagonals_size, int match_score, int mismatch_score, int gap_open_score, int gap_extend_score) {
+    int bid = blockIdx.x + blockIdx.y + blockIdx.z; //block index
+    int tid = threadIdx.x + threadIdx.y + threadIdx.z; //thread index
+    int grid_size = gridDim.x*gridDim.y*gridDim.z;
+    int num_of_threads = blockDim.x*blockDim.y*blockDim.z;
     char *d_sx = sequences[bid*2];
     char *d_sy = sequences[bid*2+1];
-    if(tid==0){
-        PRINT("[bid: %d, tid: %d] sequences[%d] = %s\nsequences[%d] = %s\n", bid, tid, bid*2, sequences[bid*2], bid*2+1, sequences[bid*2+1]);
-    }
+    //sequences are accessed based on the bid
     int sx_len = device_strlen(sequences[bid*2]);
     int sy_len = device_strlen(sequences[bid*2+1]);
     int nx = sx_len+1;
     int ny = sy_len+1;
-    extern __shared__ int s[];
-    int *antidiags = s;
-    int *shared_max = &s[antidiags_size];
-    //__shared__ int max; //check if I can do this. How to collect the max value between all threads? I can do it at the end I think
-    int num_of_threads = blockDim.x*blockDim.y*blockDim.z;
-    //printf("num_of_threads: %d\n", num_of_threads);
+    extern __shared__ int s[]; //declare the whole shared memory
+    int *three_antidiagonals = s; //part of shared memory to store the three antidiagonals
+    int *shared_max = &s[three_antidiagonals_size]; //part of shared memory to store the max of each thread
     int antid_num = nx + ny - 1;
     int yr_phase = nx - 1;//yellow is the phase where the cur_antid_dim less then the max possible and is growing
     //with each iteration. red is the same but cur_antid_dim is decreasing. red and yellow have the same size.
     int o_phase = ny - nx + 1;//orange phase is the one where the cur_antid_dim is the max possible
     int err;
     int val = 1;
-    int minus_infty = NEGATIVE_INFINITY;
+    int minus_infty = INT_MIN;
     int zero=0;
     int iy = 0, ix = 0;
     int cur_antid_dim;
-    int gen_iy = 0;
-    int gen_ix = 0;
+    int gen_iy = 0; //general indexes to keep track of the starting point of the antidiagonal on the y axis
+    int gen_ix = 0; //general indexes to keep track of the starting point of the antidiagonal on the x axis
     int temp1,temp2,temp3;
-    //if (threadIdx.x == 0) max = 0;
+
+    //safety check to avoid accessing unwanted memory areas if the gridsize has not been correctly set.
+    if (bid >= sequences_num) {*d_error = -1; return;} 
+
+    //debugging
+    if(bid == 0 && tid == 0) {
+        PRINT("bid: %d, tid: %d\n", bid, tid);
+        array_print(d_result, grid_size);
+    }
+    if(tid==0){
+        PRINT("[bid: %d, tid: %d] sequences[%d] = %s\nsequences[%d] = %s\n", bid, tid, bid*2, sequences[bid*2], bid*2+1, sequences[bid*2+1]);
+    }
+
+    //initialize the maximmum value of each thread
     shared_max[threadIdx.x] = 0;
     for(int cur_antid_num = 0; cur_antid_num < antid_num; cur_antid_num  ++) {
         //compute dimension of the current antidiagonal
         if(cur_antid_num <= yr_phase) { //at index yr_phase starts the o_phase
-            //printf("[kernel %d] growing phase\n", threadIdx.x);
+            PRINT("[kernel %d] growing phase\n", threadIdx.x);
             cur_antid_dim = cur_antid_num + 1;
         }
         else if(cur_antid_num >= yr_phase + o_phase) {
-            //printf("[kernel %d] decreasing phase\n", threadIdx.x);
+            PRINT("[kernel %d] decreasing phase\n", threadIdx.x);
             cur_antid_dim = cur_antid_dim - 1;
         }
         else {
-            //printf("[kernel] const phase\n");
+            PRINT("[kernel] const phase\n");
         }
-        //printf("[kernel %d] cur_antid_num: %d, cur_antid_dim: %d\n", threadIdx.x, cur_antid_num, cur_antid_dim);
         //compute the start of ix for the current antidiagonal
         if(cur_antid_num >= yr_phase + o_phase) {
             gen_ix ++;
@@ -269,86 +283,73 @@ __global__ void alignGPU(char **sequences, int sequences_num, int *d_result, int
         iy = gen_iy - threadIdx.x;
         ix = gen_ix + threadIdx.x;
         while(true) {
-            /*
-            if (ix + gen_ix >= cur_antid_dim || iy - gen_iy < 0) {
-                printf("out of bounds iy = %d, ix = %d\n", iy, ix);
-                break;
-            }
-            */
+            //check if the indexes are out of bounds
             if (ix < 0 || iy < 0 || ix >= nx || iy >= ny) {
                 PRINT("out of bounds iy = %d, ix = %d\n", iy, ix);
                 break;
             }
-            
             //set the first row
             if (iy == 0) {
-                err = m_set(&minus_infty, iy, ix, P, antidiags, nx, ny);
+                err = m_set(&minus_infty, iy, ix, P, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
-                err = m_set(&zero, iy, ix, Q, antidiags, nx, ny);
+                err = m_set(&zero, iy, ix, Q, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
-                err = m_set(&zero, iy, ix, D, antidiags, nx, ny);
+                err = m_set(&zero, iy, ix, D, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
             }
             //set the first col
             else if(ix==0){
-                err = m_set(&zero, iy, ix, P, antidiags, nx, ny);
+                err = m_set(&zero, iy, ix, P, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
-                err = m_set(&minus_infty, iy, ix, Q, antidiags, nx, ny);
+                err = m_set(&minus_infty, iy, ix, Q, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
-                err = m_set(&zero, iy, ix, D, antidiags, nx, ny);
+                err = m_set(&zero, iy, ix, D, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
             }
             //dynamic programming
             else {
-                err = m_get(&temp1, iy-1, ix, D, antidiags, nx, ny);
+                err = m_get(&temp1, iy-1, ix, D, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
-                err = m_get(&temp2, iy-1, ix, P, antidiags, nx, ny);
+                err = m_get(&temp2, iy-1, ix, P, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
                 int b = max_of_two_integers(sum_with_infinity(temp1, SCORE_OPEN_GAP + SCORE_EXTEND_GAP), sum_with_infinity(temp2, SCORE_EXTEND_GAP));
-                err = m_set(&b, iy, ix, P, antidiags, nx, ny);
+                err = m_set(&b, iy, ix, P, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
 
-                err = m_get(&temp1, iy, ix-1, D, antidiags, nx, ny);
+                err = m_get(&temp1, iy, ix-1, D, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
-                err = m_get(&temp2, iy, ix-1, Q, antidiags, nx, ny);
+                err = m_get(&temp2, iy, ix-1, Q, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
                 int a = max_of_two_integers(sum_with_infinity(temp1, SCORE_OPEN_GAP + SCORE_EXTEND_GAP), sum_with_infinity(temp2, SCORE_EXTEND_GAP));
-                err = m_set(&a, iy, ix, Q, antidiags, nx, ny);
+                err = m_set(&a, iy, ix, Q, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
 
-                err = m_get(&temp1, iy, ix, P, antidiags, nx, ny);
+                err = m_get(&temp1, iy, ix, P, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
-                err = m_get(&temp2, iy, ix, Q, antidiags, nx, ny);
+                err = m_get(&temp2, iy, ix, Q, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
-                err = m_get(&temp3, iy-1, ix-1, D, antidiags, nx, ny);
+                err = m_get(&temp3, iy-1, ix-1, D, three_antidiagonals, nx, ny);
                 if(err<1) {*d_error = -1; return;}
-                //temp3 = d_sy[iy - 1] == d_sx[ix - 1] ? temp3 + SCORE_MATCH : temp3 + SCORE_MISMATCH;
-                //memorise the string in opposite direction to increase locality
+                //accessing the y string is reversed to decrease the number of accesses to global memory
                 temp3 = d_sy[sy_len - iy] == d_sx[ix - 1] ? temp3 + SCORE_MATCH : temp3 + SCORE_MISMATCH;
                 val = max_of_four_integers(temp1, temp2, temp3, 0);
-                err = m_set(&val, iy, ix, D, antidiags, nx, ny);
+                err = m_set(&val, iy, ix, D, three_antidiagonals, nx, ny);
+                if(err<1) {*d_error = -1; return;}
+                //update maximum
                 shared_max[threadIdx.x] = val > shared_max[threadIdx.x] ? val : shared_max[threadIdx.x];
             }
             //update the matrix indexes
             iy -= num_of_threads;
             ix += num_of_threads;
             __syncthreads();
-
         }
         //move the starting point in case we are in the growing part of the matrix
         if (gen_iy < ny - 1) {
             gen_iy ++;
         }
-        /*
-        if(threadIdx.x == 0) {
-            printf("cur_antd_num: %d\n", cur_antid_num);
-            a_print(antidiags, antidiags_size, nx);
-        }
-        */
-        
     }
 
-    //COMPUTE MAX
+    //COMPUTE MAX between threads
     for (int s = blockDim.x * blockDim.y / 2; s > 0; s >>= 1) {
     if (threadIdx.x < s && threadIdx.x + s < blockDim.x * blockDim.y) {
         shared_max[threadIdx.x] = fmaxf(shared_max[threadIdx.x], shared_max[threadIdx.x + s]);
@@ -359,60 +360,65 @@ __global__ void alignGPU(char **sequences, int sequences_num, int *d_result, int
     if (tid == 0) {
         atomicMax(&d_result[bid], shared_max[0]);
     }
-    //if(threadIdx.x == 0) printf("max: %d\n", max);
-    //*d_result = max;
-}
-
-__global__ void test(char **sequences, int num_of_sequences, int *d_result) {
-    int bid = blockIdx.x + blockIdx.y + blockIdx.z;
-    int tid = threadIdx.x + threadIdx.y + threadIdx.z;
-    if(bid<num_of_sequences/2 && tid==0) {
-        printf("block: %d, thread: %d\n[device] sequences[%d]: %s\n [device] sequences[%d]: %s\n\n", bid, tid, bid*2, sequences[bid*2], bid*2+1, sequences[bid*2+1]);
-        d_result[bid] = bid;
-    }
 }
 
 
-//todo maybe are necessary controls on the length of the input
-//todo what happens if _ are present in the input string?
-//int main()
+//the main function reads the input file and then calls the kernel
+//no error handling is present in case the strings are longer than the maximum allowed length
+//no error handling in case the structure of the file is wrong.
+//the expected structure is the first line is the number of sequences and then the sequences are in pairs
+//and are as many as the number of sequences specified in the first line.
 int main(int argc, char *argv[]) {
+    char line1[MAX_LINE_LENGTH];
+    char line2[MAX_LINE_LENGTH];
+    int longest_antidiagonal_len = 0; //len of the longest antidiagonal
+    int num_of_sequences; //number of lines in the file
+    int sx_len, sy_len;
+    char **d_sequences; //pointer to the sequences in the device
+    char **h_sequences; //pointer to the sequences in the host
+    int *d_result; //pointer to the result in the device
+    int *h_result;
+    int result_len;
+    int *d_error; //used to check if the kernel has been executed correctly MAYBE HAS TO BE AN ARRAY
+    int *h_error;
+    int three_antidiagonals_size;
+    int nBytes;
+    double iStart, iElaps;
+
+
+
      // set up device
     int dev = 1;
     cudaDeviceProp deviceProp;
     CHECK(cudaGetDeviceProperties(&deviceProp, dev));
     printf("[main] Using Device %d: %s\n", dev, deviceProp.name);
     CHECK(cudaSetDevice(dev));
-
+    //check the main arguments
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <file_path>\n", argv[0]);
         return 1;
     }
-
+    //open the file
     FILE *file = fopen(argv[1], "r");
     if (file == NULL) {
         perror("Error opening file");
         exit(EXIT_FAILURE);
     }
-
-    char line1[MAX_LINE_LENGTH];
-    char line2[MAX_LINE_LENGTH];
-    int max_antidiag = 0;//len of the longest antidiagonal
-
     if (fgets(line1, sizeof(line1), file) == NULL) {
         printf("file is empty");
         return 1; // Exit loop if EOF or error
     }
-    int line_num = atoi(line1); //get the number of lines of the file
-    printf("line_num: %d\n", line_num);
-    int sx_len, sy_len;
-    char **d_sequences;
-    char **h_sequences = (char**)malloc(line_num * sizeof(char*));
-    int *d_result;
-    int result_len = line_num/2;
-    CHECK(cudaMalloc(&d_result, result_len*sizeof(int)));
-    int *h_result = (int *)malloc(result_len*sizeof(int));
-    for (int i = 0; i < line_num; i+=2) {
+    //get the number of sequences in the file (stored as the first line of the file)
+    num_of_sequences = atoi(line1);
+    printf("num_of_sequences: %d\n", num_of_sequences);
+    //allocate the memory for the sequences, the result and the error
+    h_sequences = (char**)malloc(num_of_sequences * sizeof(char*));
+    result_len = num_of_sequences/2; //number of results (since we have two sequences for each alignment is the half of the sequences)
+    h_result = (int *)malloc(result_len*sizeof(int));
+    h_error = (int *)malloc(sizeof(int));
+    
+    //read the sequences from the file and store them in the device memory
+    for (int i = 0; i < num_of_sequences; i+=2) {
         PRINT("%d\n", i);
         // Read the first line
         if (fgets(line1, sizeof(line1), file) == NULL) {
@@ -420,13 +426,11 @@ int main(int argc, char *argv[]) {
         }
         // Read the second line
         if (fgets(line2, sizeof(line2), file) == NULL) {
-            // Print the first line only if EOF or error on the second line
-            printf("%s", line1);
             break;
         }
         PRINT("[host] line1: %s\n line2: %s\n", line1, line2);
-        max_antidiag = strlen(line1) > max_antidiag ? strlen(line1) : max_antidiag;
-        max_antidiag = strlen(line2) > max_antidiag ? strlen(line2) : max_antidiag;
+        longest_antidiagonal_len = strlen(line1) > longest_antidiagonal_len ? strlen(line1) : longest_antidiagonal_len;
+        longest_antidiagonal_len = strlen(line2) > longest_antidiagonal_len ? strlen(line2) : longest_antidiagonal_len;
         if(strlen(line1) > strlen(line2)){
             sx_len = strlen(line2);
             sy_len = strlen(line1);
@@ -446,54 +450,50 @@ int main(int argc, char *argv[]) {
             CHECK(cudaMemcpy(h_sequences[i+1], line2, sy_len * sizeof(char), cudaMemcpyHostToDevice));
         }
     }
-    CHECK(cudaMalloc((void **)&d_sequences, line_num * sizeof(char *)));
-    cudaMemcpy(d_sequences, h_sequences, sizeof(char*) * line_num, cudaMemcpyHostToDevice);
+    CHECK(cudaMalloc((void **)&d_sequences, num_of_sequences * sizeof(char *)));
+    cudaMemcpy(d_sequences, h_sequences, sizeof(char*) * num_of_sequences, cudaMemcpyHostToDevice);
+    CHECK(cudaMalloc((void **)&d_error, sizeof(int))); //maybe has to be an array
+    CHECK(cudaMalloc(&d_result, result_len*sizeof(int)));
 
-    int *d_error;
-    CHECK(cudaMalloc((void **)&d_error, sizeof(int)));
-    int max_antidiags_size = max_antidiag * 3 * 3;
-    int nBytes = max_antidiags_size * sizeof(int);
-    dim3 block(32);
-    dim3 grid(line_num/2);
-    int num_of_threads = block.x*block.y*block.z;
-    printf("[main] block_size: %d\n", block.x*block.y*block.z);
-    printf("[main] grid_size: %d\n", grid.x*grid.y*grid.z);
-    double iStart = seconds();
+    
+    three_antidiagonals_size = longest_antidiagonal_len * 3 * 3;
+    nBytes = three_antidiagonals_size * sizeof(int);
+    iStart = seconds();
     //la grandezza della shared memory va data per blocco o in generale?
     //todo inserire una parte che controlla quanto spazio abbiamo in memoria e quando si satura chiama il kernel e
     //se rimangono allineamenti lo richiama una seconda volta.
-    alignGPU<<<grid, block, nBytes+ num_of_threads*sizeof(int)>>>(d_sequences, line_num, d_result, d_error, max_antidiags_size, SCORE_MATCH, SCORE_MISMATCH, SCORE_OPEN_GAP, SCORE_EXTEND_GAP);
+    dim3 block(32);
+    dim3 grid(num_of_sequences/2);
+    int num_of_threads = block.x*block.y*block.z;
+    printf("[main] block_size: %d\n", block.x*block.y*block.z);
+    printf("[main] grid_size: %d\n", grid.x*grid.y*grid.z);
+    alignGPU<<<grid, block, nBytes+ num_of_threads*sizeof(int)>>>(d_sequences, num_of_sequences, d_result, d_error, three_antidiagonals_size, SCORE_MATCH, SCORE_MISMATCH, SCORE_OPEN_GAP, SCORE_EXTEND_GAP);
     CHECK(cudaDeviceSynchronize());
     CHECK(cudaGetLastError());
     CHECK(cudaMemcpy(h_result, d_result, result_len * sizeof(int), cudaMemcpyDeviceToHost));
-    int *h_error = (int *)malloc(sizeof(int));
     CHECK(cudaMemcpy(h_error, d_error, sizeof(int), cudaMemcpyDeviceToHost));
 
+    //print the results
     for(int i = 0; i < result_len; i++) {
         printf("Score: %d\n", h_result[i]);
     }
-    double iElaps = seconds() - iStart;
+    iElaps = seconds() - iStart;
     printf("elapsed %f\n", iElaps);
-    //write a kernel that simply prints the strings
-    //write the strings in an array of strings
-    //allocate the string and then a pointer to the string. Is it possible?
-    for(int i = 0; i < line_num; i++){
+
+    //free the global memory
+    for(int i = 0; i < num_of_sequences; i++){
         cudaFree(h_sequences[i]); //host not device memory
         //TODO: check error
     }
     cudaFree(d_sequences);
+    cudaFree(d_result);
+    cudaFree(d_error);
+
+    //free host memory
     free(h_sequences);
+    free(h_result);
+    free(h_error);
     fclose(file);
     CHECK(cudaDeviceReset());
     return 0;
 }
-
-
-/*
-run commands
-nvcc cur.cu -o cur
-./cur input.txt
-*/
-
-//THERE IS SOME KIND OF MISTAKE IN THE HANDLING OF THE THREADS.
-//TOO MANY THREADS ARE ALLOCATED
