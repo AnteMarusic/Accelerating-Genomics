@@ -1,5 +1,6 @@
 #debug
 .dSYM/
+*.dSYM/
 
 #executables
 .o
@@ -16,3 +17,5 @@ git.txt
 
 #compilation
 program
+
+.vscode
