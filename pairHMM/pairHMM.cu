@@ -21,6 +21,14 @@
     }                                                                          \
 }
 
+//used to find the execution time of the program
+inline double seconds(){
+    struct timeval tp;
+    struct timezone tzp;
+    int i = gettimeofday(&tp, &tzp);
+    return ((double)tp.tv_sec + (double)tp.tv_usec * 1.e-6);
+}
+
 
 // function to get the time of day in seconds
 double get_time() {
@@ -399,7 +407,14 @@ int main(int argc, const char *argv[]) {
     double *h_Qi = NULL;
     double *h_Qd = NULL;
     double *h_Qg = NULL;
-
+    double **h_result = NULL;
+    char **d_haplotypes = NULL;
+    char **d_reads = NULL;
+    double *d_Qr = NULL;
+    double *d_Qi = NULL;
+    double *d_Qd = NULL;
+    double *d_Qg = NULL;
+    double **d_result = NULL;
  
     //while file contains line
     while (1) {
@@ -538,6 +553,23 @@ int main(int argc, const char *argv[]) {
             free(Qg);
             free(read);
         }
+
+        //allocate the arrays in the device
+        CHECK(cudaMalloc((void **)&d_haplotypes, num_read * sizeof(char *)));
+        cudaMemcpy(d_haplotypes, h_haplotypes, sizeof(char*) * num_haplotypes, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc((void **)&d_reads, num_read * sizeof(char *)));
+        cudaMemcpy(d_read, h_read, sizeof(char*) * num_read, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc((void **)&d_Qr, num_read * sizeof(double *)));
+        cudaMemcpy(d_Qr, h_Qr, sizeof(double *) * num_read, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc((void **)&d_Qi, num_read * sizeof(double *)));
+        cudaMemcpy(d_Qi, h_Qi, sizeof(double *) * num_read, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc((void **)&d_Qd, num_read * sizeof(double *)));
+        cudaMemcpy(d_Qd, h_Qd, sizeof(double *) * num_read, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc((void **)&d_Qg, num_read * sizeof(double *)));
+        cudaMemcpy(d_Qg, h_Qg, sizeof(double *) * num_read, cudaMemcpyHostToDevice);
+        CHECK(cudaMalloc((void **)&d_result, num_read * sizeof(double *)));
+
+        
 
         iStart = seconds();
         //la grandezza della shared memory va data per blocco o in generale?
