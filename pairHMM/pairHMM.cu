@@ -403,17 +403,17 @@ int main(int argc, const char *argv[]) {
 
     char **h_haplotypes = NULL;
     char **h_reads = NULL;
-    double *h_Qr = NULL;
-    double *h_Qi = NULL;
-    double *h_Qd = NULL;
-    double *h_Qg = NULL;
+    double **h_Qr = NULL;
+    double **h_Qi = NULL;
+    double **h_Qd = NULL;
+    double **h_Qg = NULL;
     double **h_result = NULL;
     char **d_haplotypes = NULL;
     char **d_reads = NULL;
-    double *d_Qr = NULL;
-    double *d_Qi = NULL;
-    double *d_Qd = NULL;
-    double *d_Qg = NULL;
+    double **d_Qr = NULL;
+    double **d_Qi = NULL;
+    double **d_Qd = NULL;
+    double **d_Qg = NULL;
     double **d_result = NULL;
  
     //while file contains line
@@ -536,16 +536,16 @@ int main(int argc, const char *argv[]) {
             // X = (double **)malloc((len_read + 1) * sizeof(double *));
             // Y = (double **)malloc((len_read + 1) * sizeof(double *));
 
-            CHECK(cudaMalloc(&h_reads[i], read_len * sizeof(char)));
-            CHECK(cudaMemcpy(h_reads[i], read, read_len * sizeof(char), cudaMemcpyHostToDevice));
-            CHECK(cudaMalloc(&h_Qr[i], read_len * sizeof(double)));
-            CHECK(cudaMemcpy(h_Qr[i], Qr, read_len * sizeof(double), cudaMemcpyHostToDevice));
-            CHECK(cudaMalloc(&h_Qi[i], read_len * sizeof(double)));
-            CHECK(cudaMemcpy(h_Qi[i], Qi, read_len * sizeof(double), cudaMemcpyHostToDevice));
-            CHECK(cudaMalloc(&h_Qd[i], read_len * sizeof(double)));
-            CHECK(cudaMemcpy(h_Qd[i], Qd, read_len * sizeof(double), cudaMemcpyHostToDevice));
-            CHECK(cudaMalloc(&h_Qg[i], read_len * sizeof(double)));
-            CHECK(cudaMemcpy(h_Qg[i], Qg, read_len * sizeof(double), cudaMemcpyHostToDevice));
+            CHECK(cudaMalloc(&h_reads[i], len_read * sizeof(char)));
+            CHECK(cudaMemcpy(h_reads[i], read, len_read * sizeof(char), cudaMemcpyHostToDevice));
+            CHECK(cudaMalloc(&h_Qr[i], len_read * sizeof(double)));
+            CHECK(cudaMemcpy(h_Qr[i], Qr, len_read * sizeof(double), cudaMemcpyHostToDevice));
+            CHECK(cudaMalloc(&h_Qi[i], len_read * sizeof(double)));
+            CHECK(cudaMemcpy(h_Qi[i], Qi, len_read * sizeof(double), cudaMemcpyHostToDevice));
+            CHECK(cudaMalloc(&h_Qd[i], len_read * sizeof(double)));
+            CHECK(cudaMemcpy(h_Qd[i], Qd, len_read * sizeof(double), cudaMemcpyHostToDevice));
+            CHECK(cudaMalloc(&h_Qg[i], len_read * sizeof(double)));
+            CHECK(cudaMemcpy(h_Qg[i], Qg, len_read * sizeof(double), cudaMemcpyHostToDevice));
 
             free(Qr);
             free(Qi);
@@ -558,7 +558,7 @@ int main(int argc, const char *argv[]) {
         CHECK(cudaMalloc((void **)&d_haplotypes, num_read * sizeof(char *)));
         cudaMemcpy(d_haplotypes, h_haplotypes, sizeof(char*) * num_haplotypes, cudaMemcpyHostToDevice);
         CHECK(cudaMalloc((void **)&d_reads, num_read * sizeof(char *)));
-        cudaMemcpy(d_read, h_read, sizeof(char*) * num_read, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_reads, h_reads, sizeof(char*) * num_read, cudaMemcpyHostToDevice);
         CHECK(cudaMalloc((void **)&d_Qr, num_read * sizeof(double *)));
         cudaMemcpy(d_Qr, h_Qr, sizeof(double *) * num_read, cudaMemcpyHostToDevice);
         CHECK(cudaMalloc((void **)&d_Qi, num_read * sizeof(double *)));
