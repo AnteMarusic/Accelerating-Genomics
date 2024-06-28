@@ -584,7 +584,7 @@ int main(int argc, const char *argv[]) {
         printTest<<<1,1>>>();
         CHECK(cudaDeviceSynchronize());
         CHECK(cudaGetLastError());
-        CHECK(cudaMemcpy(h_result, d_result, num_of_aligmments * sizeof(int), cudaMemcpyDeviceToHost));
+        CHECK(cudaMemcpy(h_result, d_result, num_of_aligmments * sizeof(double), cudaMemcpyDeviceToHost));
         
 
         //put the stream pointing to the reads at the beginning of the next iteration
