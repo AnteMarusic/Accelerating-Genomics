@@ -400,6 +400,7 @@ int main(int argc, const char *argv[]) {
     double *X = NULL;
     double *Y = NULL;
     double iStart, iElaps;
+    int num_of_aligmments = 0;
 
     char **h_haplotypes = NULL;
     char **h_reads = NULL;
