@@ -9,6 +9,18 @@
 #define MAX_READ_LEN 1000
 #define OFFSET 33.0
 
+#define CHECK(call)                                                            \
+{                                                                              \
+    const cudaError_t error = call;                                            \
+    if (error != cudaSuccess)                                                  \
+    {                                                                          \
+        fprintf(stderr, "Error: %s:%d, ", __FILE__, __LINE__);                 \
+        fprintf(stderr, "code: %d, reason: %s\n", error,                       \
+                cudaGetErrorString(error));                                    \
+        exit(1);                                                               \
+    }                                                                          \
+}
+
 
 // function to get the time of day in seconds
 double get_time() {
@@ -305,11 +317,23 @@ void cleanup(double *antidiags, char *read, double *Qr, double *Qi, double *Qd, 
 }
 
 
+__global__ void printTest() {
+    printf("Hello from the GPU!\n");
+}
+
+
 int main(int argc, const char *argv[]) {
     //variables:
     FILE *file_stream_h;
     FILE *file_stream_r;
     FILE *file_stream_out;
+
+    // set up device
+    int dev = 1;
+    cudaDeviceProp deviceProp;
+    CHECK(cudaGetDeviceProperties(&deviceProp, dev));
+    printf("[main] Using Device %d: %s\n", dev, deviceProp.name);
+    CHECK(cudaSetDevice(dev));
 
     // Check if the correct number of arguments is provided
     if (argc != 3) {
@@ -367,7 +391,16 @@ int main(int argc, const char *argv[]) {
     double *M = NULL;
     double *X = NULL;
     double *Y = NULL;
+    double iStart, iElaps;
 
+    char **h_haplotypes = NULL;
+    char **h_reads = NULL;
+    double *h_Qr = NULL;
+    double *h_Qi = NULL;
+    double *h_Qd = NULL;
+    double *h_Qg = NULL;
+
+ 
     //while file contains line
     while (1) {
         printf("#batch: %d\n", iteration);
@@ -380,9 +413,48 @@ int main(int argc, const char *argv[]) {
         fgets(line, sizeof(line), file_stream_h); // Skip the line with the haplotype lengths
 
         //Allocate memory for haplotypes array
-        char **haplotypes = (char**)malloc(num_haplotypes * sizeof(char*));
-        if (haplotypes == NULL) {
+        h_haplotypes = (char**)malloc(num_haplotypes * sizeof(char*));
+        if (h_haplotypes == NULL) {
             fprintf(stderr, "Memory allocation failed for haplotypes array\n");
+            cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
+            return EXIT_FAILURE;
+        }
+        h_reads = (char**)malloc(num_read * sizeof(char*));
+        if (h_reads == NULL) {
+            fprintf(stderr, "Memory allocation failed for sequences array\n");
+            cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
+            return EXIT_FAILURE;
+        }
+        //allocate the memory for the sequences, the result
+        num_of_aligmments = num_read*num_haplotypes; //number of results (since we have two sequences for each alignment is the half of the sequences)
+        h_result = (double **)malloc(num_of_aligmments*sizeof(double*));
+        if (h_result == NULL) {
+            fprintf(stderr, "Memory allocation failed for sequences array\n");
+            cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
+            return EXIT_FAILURE;
+        }
+        h_Qr = (double**)malloc(num_read * sizeof(double*));
+        if (h_Qr == NULL) {
+            fprintf(stderr, "Memory allocation failed for sequences array\n");
+            cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
+            return EXIT_FAILURE;
+        }
+        h_Qi = (double**)malloc(num_read * sizeof(double*));
+        if (h_Qi == NULL) {
+            fprintf(stderr, "Memory allocation failed for sequences array\n");
+            cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
+            return EXIT_FAILURE;
+        }
+        h_Qd = (double**)malloc(num_read * sizeof(double*));
+        if (h_Qd == NULL) {
+            fprintf(stderr, "Memory allocation failed for sequences array\n");
+            cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
+            return EXIT_FAILURE;
+        }
+        h_Qg = (double**)malloc(num_read * sizeof(double*));
+        if (h_Qg == NULL) {
+            fprintf(stderr, "Memory allocation failed for sequences array\n");
+            cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
             return EXIT_FAILURE;
         }
 
@@ -390,21 +462,33 @@ int main(int argc, const char *argv[]) {
         for (i = 0; i < num_read; i++) {
             fgets(line, sizeof(line), file_stream_h);
         }
+        // //get all the haplotypes
+        // for (i = 0; i < num_haplotypes; i++) {
+        //     if (fgets(line, sizeof(line), file_stream_h) == NULL) {
+        //         fprintf(stderr, "Error reading haplotypes.\n");
+        //         cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
+        //         return EXIT_FAILURE;
+        //     }
+        //     line[strcspn(line, "\n")] = '\0'; // Remove the newline character
+        //     haplotypes[i] = (char*)malloc((sizeof(line) + 1) * sizeof(char));
+        //     if (haplotypes[i] == NULL) {
+        //         fprintf(stderr, "Error allocating memory for haplotype %d.\n", i);
+        //         cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
+        //         return EXIT_FAILURE;
+        //     }
+        //     strncpy(haplotypes[i], line, sizeof(line));
+        // }
+
         //get all the haplotypes
         for (i = 0; i < num_haplotypes; i++) {
             if (fgets(line, sizeof(line), file_stream_h) == NULL) {
                 fprintf(stderr, "Error reading haplotypes.\n");
-                cleanup(antidiags, read, Qr, Qi, Qd, Qg, haplotypes, num_haplotypes);
+                cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
                 return EXIT_FAILURE;
             }
             line[strcspn(line, "\n")] = '\0'; // Remove the newline character
-            haplotypes[i] = (char*)malloc((sizeof(line) + 1) * sizeof(char));
-            if (haplotypes[i] == NULL) {
-                fprintf(stderr, "Error allocating memory for haplotype %d.\n", i);
-                cleanup(antidiags, read, Qr, Qi, Qd, Qg, haplotypes, num_haplotypes);
-                return EXIT_FAILURE;
-            }
-            strncpy(haplotypes[i], line, sizeof(line));
+            CHECK(cudaMalloc(&h_haplotypes[i], (sizeof(line) + 1) * sizeof(char)));
+            CHECK(cudaMemcpy(h_haplotypes[i], line, (sizeof(line) + 1) * sizeof(char), cudaMemcpyHostToDevice));
         }
 
 
@@ -412,7 +496,7 @@ int main(int argc, const char *argv[]) {
         for (i = 0; i < num_read; i++) {
             if (fgets(line, sizeof(line), file_stream_r) == NULL) {
                 fprintf(stderr, "Error reading reads.\n");
-                cleanup(antidiags, read, Qr, Qi, Qd, Qg, haplotypes, num_haplotypes);
+                cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
                 return EXIT_FAILURE;
             }
             line[strcspn(line, "\n")] = '\0'; // Remove the newline character
@@ -426,7 +510,7 @@ int main(int argc, const char *argv[]) {
             read = (char *)malloc((len_read + 1) * sizeof(char));
             if (Qr == NULL || Qi == NULL || Qd == NULL || Qg == NULL) {
                 fprintf(stderr, "Error allocating memory for quality scores.\n");
-                cleanup(antidiags, read, Qr, Qi, Qd, Qg, haplotypes, num_haplotypes);
+                cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
                 return EXIT_FAILURE;
             }
 
@@ -437,49 +521,38 @@ int main(int argc, const char *argv[]) {
             // X = (double **)malloc((len_read + 1) * sizeof(double *));
             // Y = (double **)malloc((len_read + 1) * sizeof(double *));
 
-            //call the algo
-            for (j = 0; j < num_haplotypes; j++) {
-                len_haplotype = strlen(haplotypes[j]);
-                min_len = len_read < len_haplotype ? len_read : len_haplotype;
-                //allocate an array to fit three antidiag of max size min_len+1 for the three matrixes
-                antidiags_size = (min_len+1) * 3 * 3;
-                nBytes = antidiags_size * sizeof(double);
-                antidiags = (double *) malloc (nBytes);
-                if (antidiags == NULL) {
-                    fprintf(stderr, "Error allocating memory for matrices.\n");
-                    cleanup(antidiags, read, Qr, Qi, Qd, Qg, haplotypes, num_haplotypes);
-                    return EXIT_FAILURE;
-                }
-                memset(antidiags, 0, nBytes);
-                M = antidiags;
-                X = antidiags + (min_len+1)*3;
-                Y = antidiags + 2*(min_len+1)*3;
-
-                //call the algo
-                pairHMM(lh, M, X, Y, read, haplotypes[j], len_read, len_haplotype, Qr, Qi, Qd, Qg);
-                printf("%f\n", *lh);
-                //print likelihood
-                fprintf(file_stream_out, "%f\n", *lh);
-
-                //free the memory
-                free(antidiags);
-                antidiags = NULL;
-                M = NULL;
-                X = NULL;
-                Y = NULL;
-            }
+            CHECK(cudaMalloc(&h_reads[i], read_len * sizeof(char)));
+            CHECK(cudaMemcpy(h_reads[i], read, read_len * sizeof(char), cudaMemcpyHostToDevice));
+            CHECK(cudaMalloc(&h_Qr[i], read_len * sizeof(double)));
+            CHECK(cudaMemcpy(h_Qr[i], Qr, read_len * sizeof(double), cudaMemcpyHostToDevice));
+            CHECK(cudaMalloc(&h_Qi[i], read_len * sizeof(double)));
+            CHECK(cudaMemcpy(h_Qi[i], Qi, read_len * sizeof(double), cudaMemcpyHostToDevice));
+            CHECK(cudaMalloc(&h_Qd[i], read_len * sizeof(double)));
+            CHECK(cudaMemcpy(h_Qd[i], Qd, read_len * sizeof(double), cudaMemcpyHostToDevice));
+            CHECK(cudaMalloc(&h_Qg[i], read_len * sizeof(double)));
+            CHECK(cudaMemcpy(h_Qg[i], Qg, read_len * sizeof(double), cudaMemcpyHostToDevice));
 
             free(Qr);
             free(Qi);
             free(Qd);
             free(Qg);
             free(read);
-            Qr = NULL;
-            Qi = NULL;
-            Qd = NULL;
-            Qg = NULL;
-            read = NULL;
         }
+
+        iStart = seconds();
+        //la grandezza della shared memory va data per blocco o in generale?
+        //todo inserire una parte che controlla quanto spazio abbiamo in memoria e quando si satura chiama il kernel e
+        //se rimangono allineamenti lo richiama una seconda volta.
+        // dim3 block(32);
+        // dim3 grid(num_of_aligmments);
+        // int num_of_threads = block.x*block.y*block.z;
+        // printf("[main] block_size: %d\n", block.x*block.y*block.z);
+        // printf("[main] grid_size: %d\n", grid.x*grid.y*grid.z);
+        printTest<<<1,1>>>();
+        CHECK(cudaDeviceSynchronize());
+        CHECK(cudaGetLastError());
+        CHECK(cudaMemcpy(h_result, d_result, num_of_aligmments * sizeof(int), cudaMemcpyDeviceToHost));
+        
 
         //put the stream pointing to the reads at the beginning of the next iteration
         for (i = 0; i < num_haplotypes; i++) {
