@@ -223,7 +223,7 @@ __global__ void alignPairs(char **haplotypes, char **reads, int num_of_aligmment
     } 
 
 }
-
+//
 __global__ void align1thread(char **haplotypes, char **reads, double *result, int num_of_aligmments, int num_read, int num_haplotypes,
 int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, double **array_Qd, double **array_Qg) {
     int bid = blockIdx.x + blockIdx.y + blockIdx.z; //block index
