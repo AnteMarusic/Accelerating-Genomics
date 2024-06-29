@@ -1,4 +1,4 @@
 testantid.c
 *.cpp
 *.exe
-test_set/*
+/test_set/*

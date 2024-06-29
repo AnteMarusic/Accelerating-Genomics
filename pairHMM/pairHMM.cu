@@ -233,8 +233,10 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
     if (bid >= num_of_aligmments) {
         return;
     }
-    int haplotype_index = bid/num_read;
-    int read_index = bid % num_read;
+    // int haplotype_index = bid/num_read;
+    // int read_index = bid % num_read;
+    int haplotype_index = bid % num_haplotypes;
+    int read_index = bid/num_haplotypes;
     extern __shared__ double antidiags[];
     int read_len = reads_len[read_index];
     int haplotype_len = haplotypes_len[haplotype_index];
