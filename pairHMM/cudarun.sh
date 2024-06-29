@@ -4,6 +4,7 @@ PROGRAM1="pairHMM"
 INPUT_FILE="test_set/10s.in"
 OUTPUT_FILE="test_set/10s.out"
 
+
 # Compile the cuda program
 nvcc $FLAGS $PROGRAM1.cu -o $PROGRAM1
 if [ $? -eq 0 ]; then
