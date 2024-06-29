@@ -324,9 +324,49 @@ void cleanup(double *antidiags, char *read, double *Qr, double *Qi, double *Qd, 
     }
 }
 
+__host__ void freeCudaAll(char **d_haplotypes, char **d_reads, double **d_Qr, double **d_Qi, double **d_Qd, double **d_Qg, double *d_result, char **h_haplotypes, char **h_reads, double **h_Qr, double **h_Qi, double **h_Qd, double **h_Qg, int num_of_aligmments, int num_haplotypes, int num_read){
+    for (int i = 0; i < num_haplotypes; i ++) {
+        cudaFree(h_haplotypes[i]);
+    }
+    cudaFree(d_haplotypes);
+    for (int i = 0; i < num_read; i ++) {
+        cudaFree(h_reads[i]);
+        cudaFree(h_Qr[i]);
+        cudaFree(h_Qi[i]);
+        cudaFree(h_Qd[i]);
+        cudaFree(h_Qg[i]);
+    }
+    cudaFree(d_reads);
+    cudaFree(d_Qr);
+    cudaFree(d_Qi);
+    cudaFree(d_Qd);
+    cudaFree(d_Qg);
+    cudaFree(d_result);
+    d_haplotypes = NULL;
+    d_reads = NULL;
+    d_result = NULL;
+    d_Qr = NULL;
+    d_Qi = NULL;
+    d_Qd = NULL;
+    d_Qg = NULL;
+}
 
 __global__ void printTest() {
     printf("Hello from the GPU!\n");
+}
+
+__global__ void printREADS(char **reads, int num_read) {
+    for (int i = 0; i < num_read; i ++) {
+        printf("%s\n", reads[i]);
+    }   
+    printf("finished printing\n");
+}
+
+__global__ void setRESULT(double *result, int num_of_aligmments) {
+    for (int i = 0; i < num_of_aligmments; i ++) {
+        result[i] = i;
+    }   
+    printf("set all values in result\n");
 }
 
 
@@ -408,14 +448,14 @@ int main(int argc, const char *argv[]) {
     double **h_Qi = NULL;
     double **h_Qd = NULL;
     double **h_Qg = NULL;
-    double **h_result = NULL;
+    double *h_result = NULL;
     char **d_haplotypes = NULL;
     char **d_reads = NULL;
     double **d_Qr = NULL;
     double **d_Qi = NULL;
     double **d_Qd = NULL;
     double **d_Qg = NULL;
-    double **d_result = NULL;
+    double *d_result = NULL;
  
     //while file contains line
     while (1) {
@@ -443,7 +483,7 @@ int main(int argc, const char *argv[]) {
         }
         //allocate the memory for the sequences, the result
         num_of_aligmments = num_read*num_haplotypes; //number of results (since we have two sequences for each alignment is the half of the sequences)
-        h_result = (double **)malloc(num_of_aligmments*sizeof(double*));
+        h_result = (double *)malloc(num_of_aligmments*sizeof(double));
         if (h_result == NULL) {
             fprintf(stderr, "Memory allocation failed for sequences array\n");
             cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
@@ -568,7 +608,8 @@ int main(int argc, const char *argv[]) {
         cudaMemcpy(d_Qd, h_Qd, sizeof(double *) * num_read, cudaMemcpyHostToDevice);
         CHECK(cudaMalloc((void **)&d_Qg, num_read * sizeof(double *)));
         cudaMemcpy(d_Qg, h_Qg, sizeof(double *) * num_read, cudaMemcpyHostToDevice);
-        CHECK(cudaMalloc((void **)&d_result, num_read * sizeof(double *)));
+        //allocate the result
+        CHECK(cudaMalloc((void **)&d_result, num_of_aligmments * sizeof(double)));
 
         
 
@@ -581,12 +622,17 @@ int main(int argc, const char *argv[]) {
         // int num_of_threads = block.x*block.y*block.z;
         // printf("[main] block_size: %d\n", block.x*block.y*block.z);
         // printf("[main] grid_size: %d\n", grid.x*grid.y*grid.z);
-        printTest<<<1,1>>>();
+        setRESULT<<<1,1>>>(d_result, num_of_aligmments);
         CHECK(cudaDeviceSynchronize());
         CHECK(cudaGetLastError());
         CHECK(cudaMemcpy(h_result, d_result, num_of_aligmments * sizeof(double), cudaMemcpyDeviceToHost));
-        
-
+        for (i = 0; i < num_of_aligmments; i ++) {
+            //printf("%e\n", h_result[i]);
+            fprintf(file_stream_out, "%f\n", h_result[i]);
+        }
+        printf("finished printing\n");
+        //freeeeee
+        freeCudaAll(d_haplotypes, d_reads, d_Qr, d_Qi, d_Qd, d_Qg, d_result, h_haplotypes, h_reads, h_Qr, h_Qi, h_Qd, h_Qg, num_of_aligmments, num_haplotypes, num_read);
         //put the stream pointing to the reads at the beginning of the next iteration
         for (i = 0; i < num_haplotypes; i++) {
             if (fgets(line, sizeof(line), file_stream_r) == NULL) {
@@ -602,6 +648,7 @@ int main(int argc, const char *argv[]) {
     fclose(file_stream_h);
     fclose(file_stream_r);
     fclose(file_stream_out);
+    CHECK(cudaDeviceReset());
 
     return EXIT_SUCCESS;
 }
