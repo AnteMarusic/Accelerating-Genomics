@@ -6,9 +6,10 @@ PROGRAM1="pairHMMmatrix"
 #OUTPUT_FILE="test_set/test.out"
 INPUT_FILE="test_set/10s.in"
 OUTPUT_FILE="test_set/10s.out"
-#FLAGS= "-Wall -Wextra -Werror -std=c99 -pedantic -O3 -lm"
+FLAGS= "-Wall -Wextra -Werror -std=c99 -pedantic -O3 -lm"
+MATH="-lm"
 
-gcc $FLAGS $PROGRAM1.c -o $PROGRAM1.exe
+gcc $FLAGS $PROGRAM1.c -o $PROGRAM1.exe $MATH
 if [ $? -eq 0 ]; then
     echo "Compiled $PROGRAM1.c successfully"
 else
@@ -17,5 +18,5 @@ else
 fi
 
 echo "running: $PROGRAM1"
-./$PROGRAM1 $INPUT_FILE $OUTPUT_FILE
+./$PROGRAM1".exe" $INPUT_FILE $OUTPUT_FILE
 

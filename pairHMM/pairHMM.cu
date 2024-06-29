@@ -235,7 +235,7 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
     }
     int haplotype_index = bid/num_read;
     int read_index = bid % num_read;
-    extern __shared__ double *antidiags;
+    extern __shared__ double antidiags[];
     int read_len = reads_len[read_index];
     int haplotype_len = haplotypes_len[haplotype_index];
     int antid_num = (read_len+1) + (haplotype_len+1) - 1;

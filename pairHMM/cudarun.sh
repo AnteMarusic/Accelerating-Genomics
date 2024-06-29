@@ -6,7 +6,7 @@ OUTPUT_FILE="test_set/10s.out"
 
 
 # Compile the cuda program
-nvcc $FLAGS $PROGRAM1.cu -o $PROGRAM1
+nvcc $FLAGS $PROGRAM1.cu -o $PROGRAM1.exe
 if [ $? -eq 0 ]; then
     echo "Compiled $PROGRAM1.cu successfully"
 else
@@ -14,7 +14,7 @@ else
     exit 1
 fi
 
-./$PROGRAM1 $INPUT_FILE $OUTPUT_FILE
+./$PROGRAM1".exe" $INPUT_FILE $OUTPUT_FILE
 if [ $? -ne 0 ]; then
     echo "Failed to execute $PROGRAM1"
     exit 1
