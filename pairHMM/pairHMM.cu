@@ -233,8 +233,10 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
     if (bid >= num_of_aligmments) {
         return;
     }
-    int haplotype_index = bid/num_read;
-    int read_index = bid % num_read;
+    // int haplotype_index = bid/num_read;
+    // int read_index = bid % num_read;
+    int haplotype_index = bid % num_haplotypes;
+    int read_index = bid/num_haplotypes;
     extern __shared__ double antidiags[];
     int read_len = reads_len[read_index];
     int haplotype_len = haplotypes_len[haplotype_index];
@@ -249,7 +251,9 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
     double *X = antidiags + (min_len+1)*3;
     double *Y = antidiags + 2*(min_len+1)*3;
     int o_phase = (max_len+1) - (min_len+1);//orange phase is the one where the cur_antid_dim is the max possible
-    int i = 0, j = 0, k = 0;
+    int i = 0 - tid;
+    int j = 0 + tid;
+    int k = 0;
     int cur_antid = 0;
     int gen_i = 0;
     int gen_j = 0;
@@ -266,8 +270,6 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
     double *Qd = array_Qd[read_index];
     double *Qg = array_Qg[read_index];
 
-
-
     //printf("align read[%d]: %s, haplotype[%d]: %s\n", read_index, reads[read_index], haplotype_index, haplotypes[haplotype_index]);
     // int antid_num = nx + ny - 1;
     //     int yr_phase = nx - 1;//yellow is the phase where the cur_antid_dim less then the max possible and is growing
@@ -278,8 +280,17 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
 
     for (cur_antid = 0; cur_antid < antid_num; cur_antid++) {
         // printf("cur_antid: %d, antid_dim: %d\n",cur_antid, antid_dim);
-        for (k = 0; k < antid_dim; k++) {
+        while (true) {
+            if (bid == 0) {
+                printf("bid: %d, i: %d, j: %d\n", bid, i, j);
+            }
             // printf("i:%d, j:%d\n",i,j);
+            //check if the indexes are out of bounds
+            if (i < 0 || j < 0 || i >= read_len+1 || j >= haplotype_len+1) {
+                //PRINT("out of bounds iy = %d, ix = %d\n", iy, ix);
+                break;
+            }
+
             if (i == 0) {
                 m_set(0, i, j, M, read_len, haplotype_len);
                 m_set(0, i, j, X, read_len, haplotype_len);
@@ -315,12 +326,14 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
                 // printf("temp1: %e, temp2: %e\n",temp1, temp2);
                 likelihood += temp1 + temp2;
             }
-            if (i > 0) { //this should always be true
-                i--;
-            }
-            if (j < haplotype_len) { //+2?
-                j++;
-            }
+            // if (i > 0) { //this should always be true
+            //     i-= num_of_threads;
+            // }
+            // if (j < haplotype_len) { //+2?
+            //     j+= num_of_threads;
+            // }
+            i-= num_of_threads;
+            j+= num_of_threads;
         }
 
         
@@ -341,8 +354,8 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
         if (gen_i < read_len) {
             gen_i++;
         }
-        i = gen_i;
-        j = gen_j;
+        i = gen_i - tid;
+        j = gen_j + tid;
     }
     result[bid] = log10(likelihood) - log10(DBL_MAX/16);
 }
