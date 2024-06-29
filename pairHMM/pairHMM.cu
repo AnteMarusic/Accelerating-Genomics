@@ -369,6 +369,21 @@ __global__ void setRESULT(double *result, int num_of_aligmments) {
     printf("set all values in result\n");
 }
 
+__global__ void alignPairs(char **haplotypes, char **reads, int num_of_aligmments, int num_read, int num_haplotypes) {
+    int bid = blockIdx.x + blockIdx.y + blockIdx.z; //block index
+    int tid = threadIdx.x + threadIdx.y + threadIdx.z; //thread index
+    int grid_size = gridDim.x*gridDim.y*gridDim.z;
+    int num_of_threads = blockDim.x*blockDim.y*blockDim.z;
+    int haplotype_index = -1;
+    int read_index = -1;
+    if (bid < num_of_aligmments) {
+        read_index = bid % num_read;
+        haplotype_index = bid/num_read;
+        printf("align read[%d]: %s, haplotype[%d]: %s\n", read_index, reads[read_index], haplotype_index, haplotypes[haplotype_index]);
+    } 
+
+}
+
 
 int main(int argc, const char *argv[]) {
     //variables:
@@ -622,7 +637,8 @@ int main(int argc, const char *argv[]) {
         // int num_of_threads = block.x*block.y*block.z;
         // printf("[main] block_size: %d\n", block.x*block.y*block.z);
         // printf("[main] grid_size: %d\n", grid.x*grid.y*grid.z);
-        setRESULT<<<1,1>>>(d_result, num_of_aligmments);
+        dim3 grid(num_of_aligmments);
+        alignPairs<<<grid,1>>>(d_haplotypes, d_reads, num_of_aligmments, num_read, num_haplotypes);
         CHECK(cudaDeviceSynchronize());
         CHECK(cudaGetLastError());
         CHECK(cudaMemcpy(h_result, d_result, num_of_aligmments * sizeof(double), cudaMemcpyDeviceToHost));
