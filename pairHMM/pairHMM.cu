@@ -104,19 +104,11 @@ __device__ int m_set(double val, int iy, int ix, double *mat, int read_len, int 
         index = ix + offset_antid*max_antid_dim;
     }
 
-    //  if(cur_antid_num > ny-1){
-    //     index = ny - 1 - iy + offset_antid*antid_dim + offset_mat;
-    // }
-    // else {
-    //     index = ix + offset_antid*antid_dim + offset_mat;
-    // }
-    //printf("[m_set] setting val: %e, iy:%d, ix:%d, at index: %d\n", val, iy, ix, index);
-
     mat[index] = val;
     return 1;
 }
 
-//input analysis
+//input parsing
 void partition_read(char *line, char *read, double *Qr, double *Qi, double *Qd, double *Qg, int len) {
     char m[len+1], ins[len+1], d[len+1], g[len+1];
     sscanf(line, "%s %s %s %s %s", read, m, ins, d, g);
@@ -191,39 +183,7 @@ __host__ void freeCudaAll(char **d_haplotypes, char **d_reads, double **d_Qr, do
     d_Qg = NULL;
 }
 
-__global__ void printTest() {
-    printf("Hello from the GPU!\n");
-}
 
-__global__ void printREADS(char **reads, int num_read) {
-    for (int i = 0; i < num_read; i ++) {
-        printf("%s\n", reads[i]);
-    }   
-    printf("finished printing\n");
-}
-
-__global__ void setRESULT(double *result, int num_of_aligmments) {
-    for (int i = 0; i < num_of_aligmments; i ++) {
-        result[i] = i;
-    }   
-    printf("set all values in result\n");
-}
-
-__global__ void alignPairs(char **haplotypes, char **reads, int num_of_aligmments, int num_read, int num_haplotypes) {
-    int bid = blockIdx.x + blockIdx.y + blockIdx.z; //block index
-    int tid = threadIdx.x + threadIdx.y + threadIdx.z; //thread index
-    int grid_size = gridDim.x*gridDim.y*gridDim.z;
-    int num_of_threads = blockDim.x*blockDim.y*blockDim.z;
-    int haplotype_index = -1;
-    int read_index = -1;
-    if (bid < num_of_aligmments) {
-        read_index = bid % num_read;
-        haplotype_index = bid/num_read;
-        printf("align read[%d]: %s, haplotype[%d]: %s\n", read_index, reads[read_index], haplotype_index, haplotypes[haplotype_index]);
-    } 
-
-}
-//
 __global__ void align1thread(char **haplotypes, char **reads, double *result, int num_of_aligmments, int num_read, int num_haplotypes,
 int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, double **array_Qd, double **array_Qg) {
     int bid = blockIdx.x + blockIdx.y + blockIdx.z; //block index
@@ -233,8 +193,6 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
     if (bid >= num_of_aligmments) {
         return;
     }
-    // int haplotype_index = bid/num_read;
-    // int read_index = bid % num_read;
     int haplotype_index = bid % num_haplotypes;
     int read_index = bid/num_haplotypes;
     extern __shared__ double antidiags[];
@@ -270,20 +228,13 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
     double *Qd = array_Qd[read_index];
     double *Qg = array_Qg[read_index];
 
-    //printf("align read[%d]: %s, haplotype[%d]: %s\n", read_index, reads[read_index], haplotype_index, haplotypes[haplotype_index]);
-    // int antid_num = nx + ny - 1;
-    //     int yr_phase = nx - 1;//yellow is the phase where the cur_antid_dim less then the max possible and is growing
-    //     //with each iteration. red is the same but cur_antid_dim is decreasing. red and yellow have the same size.
-    //     int o_phase = ny - nx + 1;//orange phase is the one where the cur_antid_dim is the max possible
-
-        // Declare 2D arrays to store the matrices
 
     for (cur_antid = 0; cur_antid < antid_num; cur_antid++) {
         // printf("cur_antid: %d, antid_dim: %d\n",cur_antid, antid_dim);
         while (true) {
-            if (bid == 0) {
-                printf("bid: %d, i: %d, j: %d\n", bid, i, j);
-            }
+            // if (bid == 0) {
+            //     printf("bid: %d, i: %d, j: %d\n", bid, i, j);
+            // }
             // printf("i:%d, j:%d\n",i,j);
             //check if the indexes are out of bounds
             if (i < 0 || j < 0 || i >= read_len+1 || j >= haplotype_len+1) {
@@ -302,7 +253,6 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
                 m_set(0, i, j, Y, read_len, haplotype_len);
             }
             else {
-                //non so se va bene dargli l'indirizzo di temp che è una variabile locale
                 m_get(&temp1, i-1, j-1, M, read_len, haplotype_len);
                 m_get(&temp2, i-1, j-1, X, read_len, haplotype_len);
                 m_get(&temp3, i-1, j-1, Y, read_len, haplotype_len);
@@ -316,7 +266,6 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
                 m_get(&temp2, i, j-1, Y, read_len, haplotype_len);
                 m_set(temp1 * Qd[i-1] + temp2 * Qg[i-1], i, j, Y, read_len, haplotype_len);
             }
-            // antidiags_print(M, min_len);
 
             //compute likelihood
             if (i == read_len){
@@ -326,27 +275,21 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
                 // printf("temp1: %e, temp2: %e\n",temp1, temp2);
                 likelihood += temp1 + temp2;
             }
-            // if (i > 0) { //this should always be true
-            //     i-= num_of_threads;
-            // }
-            // if (j < haplotype_len) { //+2?
-            //     j+= num_of_threads;
-            // }
             i-= num_of_threads;
             j+= num_of_threads;
         }
         __syncthreads();
         
         if(cur_antid < yr_phase) { //at index yr_phase starts the o_phase
-            // printf("[main] growing phase\n");
+            // printf("growing phase\n");
             antid_dim ++;
         }
         else if(cur_antid >= yr_phase + o_phase) {
-            // printf("[main] decreasing phase\n");
+            // printf("decreasing phase\n");
             antid_dim --;
         }
         else {
-            // printf("[main] const phase\n");
+            // printf("const phase\n");
         }
         if (gen_i == read_len) {
             gen_j++;
@@ -363,7 +306,6 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
 }
 
 int main(int argc, const char *argv[]) {
-    //variables:
     FILE *file_stream_h;
     FILE *file_stream_r;
     FILE *file_stream_out;
@@ -525,22 +467,6 @@ int main(int argc, const char *argv[]) {
         for (i = 0; i < num_read; i++) {
             fgets(line, sizeof(line), file_stream_h);
         }
-        // //get all the haplotypes
-        // for (i = 0; i < num_haplotypes; i++) {
-        //     if (fgets(line, sizeof(line), file_stream_h) == NULL) {
-        //         fprintf(stderr, "Error reading haplotypes.\n");
-        //         cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
-        //         return EXIT_FAILURE;
-        //     }
-        //     line[strcspn(line, "\n")] = '\0'; // Remove the newline character
-        //     haplotypes[i] = (char*)malloc((sizeof(line) + 1) * sizeof(char));
-        //     if (haplotypes[i] == NULL) {
-        //         fprintf(stderr, "Error allocating memory for haplotype %d.\n", i);
-        //         cleanup(antidiags, read, Qr, Qi, Qd, Qg, h_haplotypes, num_haplotypes);
-        //         return EXIT_FAILURE;
-        //     }
-        //     strncpy(haplotypes[i], line, sizeof(line));
-        // }
 
         //get all the haplotypes
         for (i = 0; i < num_haplotypes; i++) {
@@ -583,10 +509,6 @@ int main(int argc, const char *argv[]) {
 
             //set values to quality arrays
             partition_read(line, read, Qr, Qi, Qd, Qg, len_read);
-            //allocation matrices
-            // M = (double **)malloc((len_read + 1) * sizeof(double *));
-            // X = (double **)malloc((len_read + 1) * sizeof(double *));
-            // Y = (double **)malloc((len_read + 1) * sizeof(double *));
 
             CHECK(cudaMalloc(&h_reads[i], len_read * sizeof(char)));
             CHECK(cudaMemcpy(h_reads[i], read, len_read * sizeof(char), cudaMemcpyHostToDevice));
@@ -629,15 +551,6 @@ int main(int argc, const char *argv[]) {
 
         
 
-        iStart = seconds();
-        //la grandezza della shared memory va data per blocco o in generale?
-        //todo inserire una parte che controlla quanto spazio abbiamo in memoria e quando si satura chiama il kernel e
-        //se rimangono allineamenti lo richiama una seconda volta.
-        // dim3 block(32);
-        // dim3 grid(num_of_aligmments);
-        // int num_of_threads = block.x*block.y*block.z;
-        // printf("[main] block_size: %d\n", block.x*block.y*block.z);
-        // printf("[main] grid_size: %d\n", grid.x*grid.y*grid.z);
         dim3 grid(num_of_aligmments);
         three_antidiagonals_size = longest_antidiagonal_len * 3 * 3;
         nBytes = three_antidiagonals_size * sizeof(double);
@@ -647,13 +560,15 @@ int main(int argc, const char *argv[]) {
             d_Qr, d_Qi, d_Qd, d_Qg);
         CHECK(cudaDeviceSynchronize());
         CHECK(cudaGetLastError());
+        iElaps = seconds() - iStart;
         CHECK(cudaMemcpy(h_result, d_result, num_of_aligmments * sizeof(double), cudaMemcpyDeviceToHost));
         for (i = 0; i < num_of_aligmments; i ++) {
             //printf("%e\n", h_result[i]);
             fprintf(file_stream_out, "%f\n", h_result[i]);
         }
         printf("finished printing\n");
-        //freeeeee
+        printf("elapsed: %fms\n", iElaps*1000);
+        //free
         freeCudaAll(d_haplotypes, d_reads, d_Qr, d_Qi, d_Qd, d_Qg, d_result, h_haplotypes, h_reads, h_Qr, h_Qi, h_Qd, h_Qg, num_of_aligmments, num_haplotypes, num_read);
         //put the stream pointing to the reads at the beginning of the next iteration
         for (i = 0; i < num_haplotypes; i++) {
