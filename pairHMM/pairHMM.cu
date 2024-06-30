@@ -129,30 +129,92 @@ __device__ double mm(double insert_quality, double delete_quality) {
     return 1 - (insert_quality + delete_quality);
 }
 
-void cleanup(double *antidiags, char *read, double *Qr, double *Qi, double *Qd, double *Qg, char **haplotypes, int num_haplotypes) {
-    if (antidiags != NULL) {
-        free(antidiags);
-    }
-    if (Qr != NULL) {
-        free(Qr);
-    }
-    if (Qi != NULL) {
-        free(Qi);
-    }
-    if (Qd != NULL) {
-        free(Qd);
-    }
-    if (Qg != NULL) {
-        free(Qg);
-    }
-    if (haplotypes != NULL) {
+#include <stdlib.h>
+
+
+void cleanup(
+    char ***h_haplotypes, int num_haplotypes,
+    char ***h_reads, int num_read,
+    double ***h_Qr, double ***h_Qi, double ***h_Qd, double ***h_Qg,
+    double **h_result,
+    int **h_haplotypes_len, int **h_reads_len
+) {
+    // Free haplotypes
+    if (*h_haplotypes != NULL) {
         for (int i = 0; i < num_haplotypes; i++) {
-            if (haplotypes[i] != NULL) free(haplotypes[i]);
+            free((*h_haplotypes)[i]);
+            (*h_haplotypes)[i] = NULL;
         }
-        free(haplotypes);
+        free(*h_haplotypes);
+        *h_haplotypes = NULL;
     }
-    if (read != NULL) {
-        free(read);
+
+    // Free reads
+    if (*h_reads != NULL) {
+        for (int i = 0; i < num_read; i++) {
+            free((*h_reads)[i]);
+            (*h_reads)[i] = NULL;
+        }
+        free(*h_reads);
+        *h_reads = NULL;
+    }
+
+    // Free Qr
+    if (*h_Qr != NULL) {
+        for (int i = 0; i < num_read; i++) {
+            free((*h_Qr)[i]);
+            (*h_Qr)[i] = NULL;
+        }
+        free(*h_Qr);
+        *h_Qr = NULL;
+    }
+
+    // Free Qi
+    if (*h_Qi != NULL) {
+        for (int i = 0; i < num_read; i++) {
+            free((*h_Qi)[i]);
+            (*h_Qi)[i] = NULL;
+        }
+        free(*h_Qi);
+        *h_Qi = NULL;
+    }
+
+    // Free Qd
+    if (*h_Qd != NULL) {
+        for (int i = 0; i < num_read; i++) {
+            free((*h_Qd)[i]);
+            (*h_Qd)[i] = NULL;
+        }
+        free(*h_Qd);
+        *h_Qd = NULL;
+    }
+
+    // Free Qg
+    if (*h_Qg != NULL) {
+        for (int i = 0; i < num_read; i++) {
+            free((*h_Qg)[i]);
+            (*h_Qg)[i] = NULL;
+        }
+        free(*h_Qg);
+        *h_Qg = NULL;
+    }
+
+    // Free result array
+    if (*h_result != NULL) {
+        free(*h_result);
+        *h_result = NULL;
+    }
+
+    // Free haplotypes lengths array
+    if (*h_haplotypes_len != NULL) {
+        free(*h_haplotypes_len);
+        *h_haplotypes_len = NULL;
+    }
+
+    // Free reads lengths array
+    if (*h_reads_len != NULL) {
+        free(*h_reads_len);
+        *h_reads_len = NULL;
     }
 }
 
@@ -579,6 +641,7 @@ int main(int argc, const char *argv[]) {
         }
 
         iteration++;
+        //cleanup(&h_haplotypes, num_haplotypes, &h_reads, num_read, &h_Qr, &h_Qi, &h_Qd, &h_Qg, &h_result, &h_haplotypes_len, &h_reads_len);
     }
 
     //close files
