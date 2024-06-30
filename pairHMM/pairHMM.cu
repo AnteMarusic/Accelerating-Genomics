@@ -335,7 +335,7 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
             i-= num_of_threads;
             j+= num_of_threads;
         }
-
+        __syncthreads();
         
         if(cur_antid < yr_phase) { //at index yr_phase starts the o_phase
             // printf("[main] growing phase\n");
@@ -357,7 +357,9 @@ int *haplotypes_len, int *reads_len, double **array_Qr, double **array_Qi, doubl
         i = gen_i - tid;
         j = gen_j + tid;
     }
-    result[bid] = log10(likelihood) - log10(DBL_MAX/16);
+    if (tid == 0) {
+        result[bid] = log10(likelihood) - log10(DBL_MAX/16);
+    }
 }
 
 int main(int argc, const char *argv[]) {
@@ -641,7 +643,7 @@ int main(int argc, const char *argv[]) {
         nBytes = three_antidiagonals_size * sizeof(double);
         iStart = seconds();
 
-        align1thread<<<grid,1, nBytes>>>(d_haplotypes, d_reads, d_result, num_of_aligmments, num_read, num_haplotypes, d_haplotypes_len, d_reads_len,
+        align1thread<<<grid,64, nBytes>>>(d_haplotypes, d_reads, d_result, num_of_aligmments, num_read, num_haplotypes, d_haplotypes_len, d_reads_len,
             d_Qr, d_Qi, d_Qd, d_Qg);
         CHECK(cudaDeviceSynchronize());
         CHECK(cudaGetLastError());
